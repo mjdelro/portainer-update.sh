@@ -117,8 +117,15 @@ restore_backup() {
     local backup="$1"
 
     log "Restoring Portainer data from $backup"
-    find "$VOLUME_DIR" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
-    tar -C "$VOLUME_DIR" -xzf "$backup"
+    if ! find "$VOLUME_DIR" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +; then
+        log "CRITICAL: Could not clear the Portainer volume for restoration."
+        return 1
+    fi
+
+    if ! tar -C "$VOLUME_DIR" -xzf "$backup"; then
+        log "CRITICAL: Could not extract the Portainer backup."
+        return 1
+    fi
 }
 
 rollback() {
@@ -230,7 +237,11 @@ if ! tar -tzf "$BACKUP" >/dev/null; then
 fi
 log "Backup verified."
 
-docker rm "$NAME" >/dev/null
+if ! docker rm "$NAME" >/dev/null; then
+    log "ERROR: Could not remove the stopped Portainer container; restarting it."
+    docker start "$NAME" >/dev/null || true
+    exit 1
+fi
 log "Starting updated Portainer."
 
 if ! start_portainer "$IMAGE" >/dev/null; then
